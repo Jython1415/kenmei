@@ -206,6 +206,7 @@
             
             const companyName = document.getElementById('companyName').value;
             const location = document.getElementById('location').value;
+            const companyDescriptor = location ? `${companyName} in ${location}` : companyName;
             
             const status = document.getElementById('status');
             const statusText = document.getElementById('statusText');
@@ -217,11 +218,11 @@
                 let markdown = "";
                 
                 for (let i = 0; i < PERPLEXITY_QUERIES.length; i++) {
-                    const query = PERPLEXITY_QUERIES[i].replace('{company}', companyName);
+                    const query = PERPLEXITY_QUERIES[i].replace('{company}', companyDescriptor);
                     statusText.textContent = `Processing query ${i + 1} of ${PERPLEXITY_QUERIES.length}...`;
                     
                     const result = await queryPerplexity(query);
-                    markdown += `# Q${i + 1}\n\n${query}\n\n${result}\n\n`;
+                    markdown += `# ${query}\n\n${result}\n\n`;
                 }
                 
                 // Step 2: Generate final report using OpenAI
