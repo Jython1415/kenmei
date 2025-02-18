@@ -147,6 +147,8 @@
         ];
 
         async function queryPerplexity(query) {
+            console.log('Starting Perplexity query:', query);
+            
             const keys = loadAPIKeys();
             if (!keys?.perplexity) {
                 throw new Error('Perplexity API key not found');
@@ -196,6 +198,33 @@
                 throw new Error('Anthropic API key not found');
             }
 
+            const requestBody = {
+                model: 'claude-3-5-sonnet-20241022',
+                max_tokens: 8192,
+                temperature: 1,
+                messages: [
+                    {
+                        role: 'user',
+                        content: [
+                            {
+                                type: 'text',
+                                text: `Produce a report based on the following information. Format in markdown with headers and lists. The purpose is to provide context for future conversations about preparing job application materials.\n\n${markdown}`
+                            }
+                        ]
+                    }
+                ]
+            };
+            
+            console.log('Anthropic API Request:', {
+                url: 'https://api.anthropic.com/v1/messages',
+                headers: {
+                    'anthropic-version': '2023-06-01',
+                    'x-api-key': 'REDACTED',
+                    'Content-Type': 'application/json'
+                },
+                body: requestBody
+            });
+
             const response = await fetch('https://api.anthropic.com/v1/messages', {
                 method: 'POST',
                 headers: {
@@ -203,23 +232,11 @@
                     'x-api-key': keys.anthropic,
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({
-                    model: 'claude-3-5-sonnet-20241022',
-                    max_tokens: 8192,
-                    temperature: 1,
-                    messages: [
-                        {
-                            role: 'user',
-                            content: [
-                                {
-                                    type: 'text',
-                                    text: `Produce a report based on the following information. Format in markdown with headers and lists. The purpose is to provide context for future conversations about preparing job application materials.\n\n${markdown}`
-                                }
-                            ]
-                        }
-                    ]
-                })
+                body: JSON.stringify(requestBody)
             });
+            
+            const data = await response.json();
+            console.log('Anthropic API Response:', data);
 
             if (!response.ok) {
                 throw new Error(`OpenAI API error: ${response.status}`);
