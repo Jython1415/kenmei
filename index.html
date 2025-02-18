@@ -84,7 +84,7 @@
     </div>
 
     <script>
-        // Encryption key for localStorage (this is just basic security, not meant for highly sensitive data)
+        // Configuration
         const STORAGE_KEY = 'companyResearchKeys';
         const ENCRYPTION_KEY = 'your-random-encryption-key';
         
@@ -93,6 +93,22 @@
             perplexity: '',
             anthropic: ''
         };
+
+        // Function to save API keys
+        function saveAPIKeys() {
+            const perplexityKey = document.getElementById('perplexityKey').value;
+            const anthropicKey = document.getElementById('anthropicKey').value;
+            
+            const keys = {
+                perplexity: perplexityKey,
+                anthropic: anthropicKey
+            };
+            
+            const encrypted = CryptoJS.AES.encrypt(JSON.stringify(keys), ENCRYPTION_KEY).toString();
+            localStorage.setItem(STORAGE_KEY, encrypted);
+            
+            console.log('API keys saved successfully!');
+            alert('API keys saved successfully!');
 
         // Load API keys on startup
         window.onload = function() {
@@ -235,15 +251,15 @@
                 body: JSON.stringify(requestBody)
             });
             
-            const data = await response.json();
-            console.log('Anthropic API Response:', data);
+            const anthropicData = await response.json();
+            console.log('Anthropic API Response:', anthropicData);
 
             if (!response.ok) {
                 throw new Error(`OpenAI API error: ${response.status}`);
             }
 
             const data = await response.json();
-            return data.choices[0].message.content;
+            return perplexityData.choices[0].message.content;
         }
 
         async function generateReport(event) {
