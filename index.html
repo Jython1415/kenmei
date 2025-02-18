@@ -94,22 +94,6 @@
             anthropic: ''
         };
 
-        // Function to save API keys
-        function saveAPIKeys() {
-            const perplexityKey = document.getElementById('perplexityKey').value;
-            const anthropicKey = document.getElementById('anthropicKey').value;
-            
-            const keys = {
-                perplexity: perplexityKey,
-                anthropic: anthropicKey
-            };
-            
-            const encrypted = CryptoJS.AES.encrypt(JSON.stringify(keys), ENCRYPTION_KEY).toString();
-            localStorage.setItem(STORAGE_KEY, encrypted);
-            
-            console.log('API keys saved successfully!');
-            alert('API keys saved successfully!');
-
         // Load API keys on startup
         window.onload = function() {
             const savedKeys = loadAPIKeys();
