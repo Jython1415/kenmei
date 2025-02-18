@@ -24,8 +24,8 @@
                         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
                 </div>
                 <div>
-                    <label for="openaiKey" class="block text-sm font-medium text-gray-700">OpenAI API Key</label>
-                    <input type="password" id="openaiKey" name="openaiKey"
+                    <label for="anthropicKey" class="block text-sm font-medium text-gray-700">Anthropic API Key</label>
+                    <input type="password" id="anthropicKey" name="anthropicKey"
                         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
                 </div>
                 <div>
@@ -87,24 +87,30 @@
         // Encryption key for localStorage (this is just basic security, not meant for highly sensitive data)
         const STORAGE_KEY = 'companyResearchKeys';
         const ENCRYPTION_KEY = 'your-random-encryption-key';
+        
+        // Update these with your API keys or use the UI to input them
+        const DEFAULT_API_KEYS = {
+            perplexity: '',
+            anthropic: ''
+        };
 
         // Load API keys on startup
         window.onload = function() {
             const savedKeys = loadAPIKeys();
             if (savedKeys) {
                 document.getElementById('perplexityKey').value = savedKeys.perplexity || '';
-                document.getElementById('openaiKey').value = savedKeys.openai || '';
+                document.getElementById('anthropicKey').value = savedKeys.anthropic || '';
             }
         };
 
         // Save API keys to localStorage with basic encryption
         function saveAPIKeys() {
             const perplexityKey = document.getElementById('perplexityKey').value;
-            const openaiKey = document.getElementById('openaiKey').value;
+            const anthropicKey = document.getElementById('anthropicKey').value;
             
             const keys = {
                 perplexity: perplexityKey,
-                openai: openaiKey
+                anthropic: anthropicKey
             };
             
             const encrypted = CryptoJS.AES.encrypt(JSON.stringify(keys), ENCRYPTION_KEY).toString();
@@ -181,31 +187,37 @@
             }
 
             const data = await response.json();
-            return data.choices[0].message.content;
+            return data.content[0].text;
         }
 
         async function generateOpenAIReport(markdown) {
             const keys = loadAPIKeys();
-            if (!keys?.openai) {
-                throw new Error('OpenAI API key not found');
+            if (!keys?.anthropic) {
+                throw new Error('Anthropic API key not found');
             }
 
-            const response = await fetch('https://api.openai.com/v1/chat/completions', {
+            const response = await fetch('https://api.anthropic.com/v1/messages', {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${keys.openai}`,
+                    'anthropic-version': '2023-06-01',
+                    'x-api-key': keys.anthropic,
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    model: 'gpt-4',
+                    model: 'claude-3-5-sonnet-20241022',
+                    max_tokens: 8192,
+                    temperature: 1,
                     messages: [
                         {
                             role: 'user',
-                            content: `Produce a report based on the following information. Format in markdown with headers and lists. The purpose is to provide context for future conversations about preparing job application materials.\n\n${markdown}`
+                            content: [
+                                {
+                                    type: 'text',
+                                    text: `Produce a report based on the following information. Format in markdown with headers and lists. The purpose is to provide context for future conversations about preparing job application materials.\n\n${markdown}`
+                                }
+                            ]
                         }
-                    ],
-                    temperature: 1,
-                    max_tokens: 2048
+                    ]
                 })
             });
 
