@@ -189,10 +189,14 @@
             }
 
             const data = await response.json();
-            return data.content[0].text;
+            console.log('Perplexity API Response:', data);
+            const citations = data.citations
+            const content = data.choices[0].message.content;
+            const citationText = citations.map((link, index) => `[${index + 1}] ${link}`).join('\n');
+            return `${content}\n\n${citationText}`;
         }
 
-        async function generateOpenAIReport(markdown) {
+        async function queryAnthropic(markdown) {
             const keys = loadAPIKeys();
             if (!keys?.anthropic) {
                 throw new Error('Anthropic API key not found');
@@ -219,7 +223,7 @@
                 url: 'https://api.anthropic.com/v1/messages',
                 headers: {
                     'anthropic-version': '2023-06-01',
-                    'x-api-key': 'REDACTED',
+                    'x-api-key': keys.anthropic,
                     'Content-Type': 'application/json'
                 },
                 body: requestBody
@@ -239,11 +243,10 @@
             console.log('Anthropic API Response:', anthropicData);
 
             if (!response.ok) {
-                throw new Error(`OpenAI API error: ${response.status}`);
+                throw new Error(`Anthropic API error: ${response.status}`);
             }
 
-            const data = await response.json();
-            return perplexityData.choices[0].message.content;
+            return anthropicData.choices[0].message.content;
         }
 
         async function generateReport(event) {
@@ -270,9 +273,9 @@
                     markdown += `# ${query}\n\n${result}\n\n`;
                 }
                 
-                // Step 2: Generate final report using OpenAI
+                // Step 2: Generate final report
                 statusText.textContent = "Generating final report...";
-                const finalReport = await generateOpenAIReport(markdown);
+                const finalReport = await queryAnthropic(markdown);
                 
                 // Display results with markdown formatting
                 const markdownOutput = document.getElementById('markdownOutput');
