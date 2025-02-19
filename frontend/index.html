@@ -7,36 +7,28 @@
     <title>Company Research Tool</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/11.1.1/marked.min.js"></script>
-    <!-- Add crypto-js for basic encryption of API keys in localStorage -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    typography: {
+                        DEFAULT: {
+                            css: {
+                                maxWidth: 'none',
+                            },
+                        },
+                    },
+                },
+            },
+        }
+    </script>
+    <!-- Add Tailwind Typography Plugin -->
+    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
 </head>
 <body class="bg-gray-100 min-h-screen">
     <div class="container mx-auto px-4 py-8">
         <h1 class="text-3xl font-bold mb-8">Company Research Tool</h1>
         
-        <!-- API Key Configuration -->
-        <div id="apiConfig" class="bg-white rounded-lg shadow-md p-6 mb-8">
-            <h2 class="text-xl font-semibold mb-4">API Configuration</h2>
-            <div class="space-y-4">
-                <div>
-                    <label for="perplexityKey" class="block text-sm font-medium text-gray-700">Perplexity API Key</label>
-                    <input type="password" id="perplexityKey" name="perplexityKey"
-                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                </div>
-                <div>
-                    <label for="anthropicKey" class="block text-sm font-medium text-gray-700">Anthropic API Key</label>
-                    <input type="password" id="anthropicKey" name="anthropicKey"
-                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                </div>
-                <div>
-                    <button onclick="saveAPIKeys()" 
-                        class="inline-flex justify-center rounded-md border border-transparent bg-blue-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
-                        Save API Keys
-                    </button>
-                </div>
-            </div>
-        </div>
-
         <!-- Input Form -->
         <div class="bg-white rounded-lg shadow-md p-6 mb-8">
             <form id="researchForm" class="space-y-4">
@@ -74,7 +66,8 @@
         <div id="results" class="hidden">
             <div class="bg-white rounded-lg shadow-md p-6">
                 <h2 class="text-xl font-semibold mb-4">Research Report</h2>
-                <div id="markdownOutput" class="prose max-w-none"></div>
+                <div id="markdownOutput" class="prose prose-slate max-w-none"></div>
+                <div id="rawMarkdown" class="hidden"></div>
                 <button onclick="copyToClipboard()" 
                     class="mt-4 inline-flex justify-center rounded-md border border-transparent bg-green-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2">
                     Copy to Clipboard
@@ -84,80 +77,24 @@
     </div>
 
     <script>
-        // Configuration
-        const STORAGE_KEY = 'companyResearchKeys';
-        const ENCRYPTION_KEY = 'your-random-encryption-key';
-        
-        // Update these with your API keys or use the UI to input them
-        const DEFAULT_API_KEYS = {
-            perplexity: '',
-            anthropic: ''
-        };
-
-        // Load API keys on startup
-        window.onload = function() {
-            const savedKeys = loadAPIKeys();
-            if (savedKeys) {
-                document.getElementById('perplexityKey').value = savedKeys.perplexity || '';
-                document.getElementById('anthropicKey').value = savedKeys.anthropic || '';
-            }
-        };
-
-        // Save API keys to localStorage with basic encryption
-        function saveAPIKeys() {
-            const perplexityKey = document.getElementById('perplexityKey').value;
-            const anthropicKey = document.getElementById('anthropicKey').value;
-            
-            const keys = {
-                perplexity: perplexityKey,
-                anthropic: anthropicKey
-            };
-            
-            const encrypted = CryptoJS.AES.encrypt(JSON.stringify(keys), ENCRYPTION_KEY).toString();
-            localStorage.setItem(STORAGE_KEY, encrypted);
-            
-            alert('API keys saved successfully!');
-        }
-
-        // Load API keys from localStorage
-        function loadAPIKeys() {
-            const encrypted = localStorage.getItem(STORAGE_KEY);
-            if (!encrypted) return null;
-            
-            try {
-                const decrypted = CryptoJS.AES.decrypt(encrypted, ENCRYPTION_KEY).toString(CryptoJS.enc.Utf8);
-                return JSON.parse(decrypted);
-            } catch (error) {
-                console.error('Error loading API keys:', error);
-                return null;
-            }
-        }
-
-        // Perplexity API queries
         const PERPLEXITY_QUERIES = [
             "what is {company}",
-            "{company}: recent news",
-            "{company}: product, business model",
-            "{company}: industry position, financials",
-            "{company}: history, recent achievements",
-            "{company}: mission, values",
-            "{company}: culture, workplace environment",
-            "{company}: culture, workplace environment; as reported by current employees",
+            // "{company}: recent news",
+            // "{company}: product, business model",
+            // "{company}: industry position, financials",
+            // "{company}: history, recent achievements",
+            // "{company}: mission, values",
+            // "{company}: culture, workplace environment",
+            // "{company}: culture, workplace environment; as reported by current employees",
             "What does it take to succeed at {company}?"
         ];
 
         async function queryPerplexity(query) {
             console.log('Starting Perplexity query:', query);
-            
-            const keys = loadAPIKeys();
-            if (!keys?.perplexity) {
-                throw new Error('Perplexity API key not found');
-            }
 
-            const response = await fetch('https://api.perplexity.ai/chat/completions', {
+            const response = await fetch('http://localhost:5001/api/perplexity', {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${keys.perplexity}`,
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
@@ -190,18 +127,18 @@
 
             const data = await response.json();
             console.log('Perplexity API Response:', data);
+
             const citations = data.citations
             const content = data.choices[0].message.content;
+
             const citationText = citations.map((link, index) => `[${index + 1}] ${link}`).join('\n');
-            return `${content}\n\n${citationText}`;
+            const perplexityText = citations.length > 0 ? `${content}\n\n${citationText}` : content;
+            console.log('Perplexity Text:', perplexityText);
+
+            return perplexityText;
         }
 
         async function queryAnthropic(markdown) {
-            const keys = loadAPIKeys();
-            if (!keys?.anthropic) {
-                throw new Error('Anthropic API key not found');
-            }
-
             const requestBody = {
                 model: 'claude-3-5-sonnet-20241022',
                 max_tokens: 8192,
@@ -219,34 +156,26 @@
                 ]
             };
             
-            console.log('Anthropic API Request:', {
-                url: 'https://api.anthropic.com/v1/messages',
-                headers: {
-                    'anthropic-version': '2023-06-01',
-                    'x-api-key': keys.anthropic,
-                    'Content-Type': 'application/json'
-                },
-                body: requestBody
-            });
-
-            const response = await fetch('https://api.anthropic.com/v1/messages', {
+            const response = await fetch('http://localhost:5001/api/anthropic', {
                 method: 'POST',
                 headers: {
-                    'anthropic-version': '2023-06-01',
-                    'x-api-key': keys.anthropic,
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify(requestBody)
             });
-            
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(`Anthropic API error: ${response.status} - ${JSON.stringify(errorData)}`);
+            }
+
             const anthropicData = await response.json();
             console.log('Anthropic API Response:', anthropicData);
 
-            if (!response.ok) {
-                throw new Error(`Anthropic API error: ${response.status}`);
-            }
+            const messageContent = anthropicData.content[0].text;
+            console.log('Anthropic Text:', messageContent);
 
-            return anthropicData.choices[0].message.content;
+            return messageContent;
         }
 
         async function generateReport(event) {
@@ -263,23 +192,45 @@
             try {
                 // Step 1: Generate Perplexity queries
                 statusText.textContent = "Querying Perplexity...";
-                let markdown = "";
-                
-                for (let i = 0; i < PERPLEXITY_QUERIES.length; i++) {
-                    const query = PERPLEXITY_QUERIES[i].replace('{company}', companyDescriptor);
-                    statusText.textContent = `Processing query ${i + 1} of ${PERPLEXITY_QUERIES.length}...`;
-                    
+
+                let completedQueries = 0;
+                const totalQueries = PERPLEXITY_QUERIES.length;
+
+                // Create an array of promises for each query
+                const queryPromises = PERPLEXITY_QUERIES.map(async (queryTemplate) => {
+                    const query = queryTemplate.replace('{company}', companyDescriptor);
                     const result = await queryPerplexity(query);
-                    markdown += `# ${query}\n\n${result}\n\n`;
-                }
+                    
+                    // Update progress after each query completes
+                    completedQueries++;
+                    statusText.textContent = `Completed ${completedQueries} of ${totalQueries} queries...`;
+                    
+                    return {
+                        query,
+                        result
+                    };
+                });
+
+                // Wait for all queries to complete
+                const results = await Promise.all(queryPromises);
+
+                // Combine results in the original order
+                const markdown = results
+                    .map(({ query, result }) => `# ${query}\n\n${result}\n\n`)
+                    .join('');
                 
                 // Step 2: Generate final report
                 statusText.textContent = "Generating final report...";
                 const finalReport = await queryAnthropic(markdown);
                 
-                // Display results with markdown formatting
+                // Store raw markdown
+                const rawMarkdown = document.getElementById('rawMarkdown');
+                rawMarkdown.textContent = finalReport;
+
+                // Display rendered markdown
                 const markdownOutput = document.getElementById('markdownOutput');
                 markdownOutput.innerHTML = marked.parse(finalReport);
+                
                 document.getElementById('results').classList.remove('hidden');
                 status.classList.add('hidden');
                 
@@ -291,8 +242,9 @@
         }
 
         function copyToClipboard() {
-            const markdownOutput = document.getElementById('markdownOutput');
-            const markdown = markdownOutput.innerText;
+            const rawMarkdown = document.getElementById('rawMarkdown');
+            const markdown = rawMarkdown.textContent;
+
             navigator.clipboard.writeText(markdown)
                 .then(() => alert('Copied to clipboard!'))
                 .catch(err => console.error('Failed to copy:', err));
