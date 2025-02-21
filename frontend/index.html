@@ -1,4 +1,4 @@
-// File: index.html
+<!-- frontend/index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -89,55 +89,6 @@
             "What does it take to succeed at {company}?"
         ];
 
-        async function queryPerplexity(query) {
-            console.log('Starting Perplexity query:', query);
-
-            const response = await fetch('http://localhost:5001/api/perplexity', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    model: 'sonar',
-                    messages: [
-                        { 
-                            role: 'system',
-                            content: '' // This used to say "Be precise and concise."
-                        },
-                        { 
-                            role: 'user',
-                            content: query 
-                        }
-                    ],
-                    temperature: 0.2,
-                    top_p: 0.9,
-                    max_tokens: 1024,
-                    return_images: false,
-                    return_related_questions: false,
-                    stream: false,
-                    presence_penalty: 0,
-                    frequency_penalty: 1
-                })
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(`Perplexity API error: ${response.status} - ${JSON.stringify(errorData)}`);
-            }
-
-            const data = await response.json();
-            console.log('Perplexity API Response:', data);
-
-            const citations = data.citations
-            const content = data.choices[0].message.content;
-
-            const citationText = citations.map((link, index) => `[${index + 1}] ${link}`).join('\n');
-            const perplexityText = citations.length > 0 ? `${content}\n\n${citationText}` : content;
-            console.log('Perplexity Text:', perplexityText);
-
-            return perplexityText;
-        }
-
         async function queryAnthropic(markdown) {
             const requestBody = {
                 model: 'claude-3-5-sonnet-20241022',
@@ -178,6 +129,102 @@
             return messageContent;
         }
 
+        // Generate a unique session ID
+        function generateSessionId() {
+            return `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        }
+
+        // Set up SSE connection for progress updates
+        function setupEventSource(sessionId, statusText) {
+            // Track total attempts across reconnects
+            if (!window.sseAttempts) {
+                window.sseAttempts = 0;
+            }
+            
+            const maxTotalAttempts = 5;
+            let currentEventSource = null;
+
+            function cleanup() {
+                if (currentEventSource) {
+                    currentEventSource.close();
+                    currentEventSource = null;
+                }
+                if (window.currentEventSource) {
+                    window.currentEventSource.close();
+                    window.currentEventSource = null;
+                }
+            }
+
+            function connect() {
+                window.sseAttempts++;
+                
+                if (window.sseAttempts > maxTotalAttempts) {
+                    statusText.textContent = 'Connection failed after multiple attempts. Please refresh the page and try again.';
+                    cleanup();
+                    return null;
+                }
+
+                console.log(`Connection attempt ${window.sseAttempts}/${maxTotalAttempts}`);
+                cleanup();
+
+                currentEventSource = new EventSource(`http://localhost:5001/api/perplexity/stream?sessionId=${sessionId}`);
+                window.currentEventSource = currentEventSource;
+
+                currentEventSource.onopen = () => {
+                    console.log('SSE connection opened');
+                    statusText.textContent = "Connected to server, preparing queries...";
+                };
+
+                currentEventSource.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        console.log('Received SSE message:', data);
+
+                        if (data.type === 'connected') {
+                            console.log('SSE connection confirmed by server');
+                            return;
+                        }
+
+                        if (data.type === 'keep-alive') {
+                            console.log('Received keep-alive');
+                            return;
+                        }
+
+                        statusText.textContent = `Completed ${data.completed} of ${data.total} queries...`;
+                        if (data.lastCompleted) {
+                            statusText.textContent += `\nLast completed: ${data.lastCompleted}`;
+                        }
+                    } catch (error) {
+                        console.error('Error parsing SSE data:', error);
+                    }
+                };
+
+                currentEventSource.onerror = (error) => {
+                    console.error('SSE Error:', error);
+                    cleanup();
+                    
+                    // Don't attempt to reconnect if we've hit the max attempts
+                    if (window.sseAttempts >= maxTotalAttempts) {
+                        statusText.textContent = 'Connection failed after multiple attempts. Please refresh the page and try again.';
+                        return;
+                    }
+
+                    // Exponential backoff for retry
+                    const delay = Math.min(1000 * Math.pow(2, window.sseAttempts - 1), 10000);
+                    statusText.textContent = `Connection issues, retrying in ${delay/1000} seconds... (Attempt ${window.sseAttempts}/${maxTotalAttempts})`;
+                    
+                    setTimeout(() => {
+                        connect();
+                    }, delay);
+                };
+
+                return currentEventSource;
+            }
+
+            return connect();
+        }
+
+
         async function generateReport(event) {
             event.preventDefault();
             
@@ -189,45 +236,80 @@
             const statusText = document.getElementById('statusText');
             status.classList.remove('hidden');
             
+            const sessionId = generateSessionId();
+            let eventSource = null;
+            
             try {
-                // Step 1: Generate Perplexity queries
-                statusText.textContent = "Querying Perplexity...";
+                // Step 2: Set up SSE connection for progress updates
+                statusText.textContent = "Establishing connection...";
+                eventSource = setupEventSource(sessionId, statusText);
+                await new Promise(resolve => setTimeout(resolve, 1000));
 
-                let completedQueries = 0;
-                const totalQueries = PERPLEXITY_QUERIES.length;
-
-                // Create an array of promises for each query
-                const queryPromises = PERPLEXITY_QUERIES.map(async (queryTemplate) => {
+                // Step 1: Prepare queries
+                const queries = PERPLEXITY_QUERIES.map(queryTemplate => {
                     const query = queryTemplate.replace('{company}', companyDescriptor);
-                    const result = await queryPerplexity(query);
-                    
-                    // Update progress after each query completes
-                    completedQueries++;
-                    statusText.textContent = `Completed ${completedQueries} of ${totalQueries} queries...`;
-                    
                     return {
                         query,
-                        result
+                        body: {
+                            model: 'sonar',
+                            messages: [
+                                { role: 'system', content: '' },
+                                { role: 'user', content: query }
+                            ],
+                            temperature: 0.2,
+                            top_p: 0.9,
+                            max_tokens: 1024,
+                            return_images: false,
+                            return_related_questions: false,
+                            stream: false,
+                            presence_penalty: 0,
+                            frequency_penalty: 1
+                        }
                     };
                 });
 
-                // Wait for all queries to complete
-                const results = await Promise.all(queryPromises);
+                // Step 3: Send batch request
+                statusText.textContent = "Starting queries...";
+                const response = await fetch('http://localhost:5001/api/perplexity/batch', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Session-ID': sessionId
+                    },
+                    body: JSON.stringify({ queries })
+                });
 
-                // Combine results in the original order
-                const markdown = results
-                    .map(({ query, result }) => `# ${query}\n\n${result}\n\n`)
-                    .join('');
+                if (!response.ok) {
+                    throw new Error(`API error: ${response.status}`);
+                }
+
+                const { results } = await response.json();
                 
-                // Step 2: Generate final report
+                // Step 4: Process results and format markdown
+                statusText.textContent = "Processing results...";
+                
+                const markdown = results
+                    .map((result, index) => {
+                        if (result.error) {
+                            return `# ${queries[index].query}\n\nError: ${result.error}\n\n`;
+                        }
+                        
+                        const citations = result.citations || [];
+                        const content = result.choices[0].message.content;
+                        const citationText = citations.map((link, i) => `[${i + 1}] ${link}`).join('\n');
+                        
+                        return `# ${queries[index].query}\n\n${content}\n\n${citationText}\n\n`;
+                    })
+                    .join('');
+
+                // Step 5: Generate final report
                 statusText.textContent = "Generating final report...";
                 const finalReport = await queryAnthropic(markdown);
                 
-                // Store raw markdown
+                // Update UI with results
                 const rawMarkdown = document.getElementById('rawMarkdown');
                 rawMarkdown.textContent = finalReport;
 
-                // Display rendered markdown
                 const markdownOutput = document.getElementById('markdownOutput');
                 markdownOutput.innerHTML = marked.parse(finalReport);
                 
@@ -238,6 +320,12 @@
                 statusText.textContent = `Error: ${error.message}`;
                 status.classList.remove('bg-yellow-50', 'border-yellow-400');
                 status.classList.add('bg-red-50', 'border-red-400');
+            } finally {
+                if (eventSource) {
+                    console.log('Closing SSE connection...');
+                    eventSource.close();
+                    window.currentEventSource = null;
+                }
             }
         }
 
